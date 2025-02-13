@@ -11,8 +11,11 @@ public class PlayerController : MonoBehaviour
     public float maxBulletSize = 1f;
     public float firePointOrbitRadius = 0.8f;
     public float moveSpeed = 3f;
-    public float stopRadius = 0.5f;
+    public float stopRadius = 0.5f; 
     public Transform target;
+
+    public float coneAngle = 45f;
+    public float coneLength = 3f;
 
     private float chargeTime = 0f;
     private GameObject chargingBullet;
@@ -32,30 +35,21 @@ public class PlayerController : MonoBehaviour
         UpdateFirePointPosition();
 
         if (chargingBullet != null)
-        {
             chargingBullet.transform.position = firePoint.position;
-        }
 
         if (Input.GetMouseButtonDown(0))
-        {
             StartChargingBullet();
-        }
 
         if (Input.GetMouseButton(0))
-        {
             ChargeBullet();
-        }
 
         if (Input.GetMouseButtonUp(0))
-        {
             ShootBullet();
-        }
 
-        CheckForObstacles();
+        CheckForObstacleAhead();
+
         if (canMove)
-        {
             MoveAlongPath();
-        }
     }
 
     void StartChargingBullet()
@@ -69,11 +63,9 @@ public class PlayerController : MonoBehaviour
     {
         chargeTime += Time.deltaTime;
         float chargeRatio = Mathf.Clamp(chargeTime / maxChargeTime, 0.05f, maxBulletSize);
-
+        
         if (chargingBullet != null)
-        {
             chargingBullet.transform.localScale = Vector3.one * chargeRatio;
-        }
 
         float newPlayerScale = Mathf.Max(transform.localScale.x - chargeRatio * Time.deltaTime, minPlayerSize);
         transform.localScale = Vector3.one * newPlayerScale;
@@ -84,27 +76,13 @@ public class PlayerController : MonoBehaviour
         if (chargingBullet != null)
         {
             Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-            RaycastHit hit;
-
-            Vector3 targetPosition;
-            
-            if (Physics.Raycast(ray, out hit))
-            {
-                targetPosition = hit.point;
-            }
-            else
-            {
-                targetPosition = ray.GetPoint(10);
-            }
-
+            Vector3 targetPosition = Physics.Raycast(ray, out RaycastHit hit) ? hit.point : ray.GetPoint(10);
             Vector3 shootDirection = (targetPosition - firePoint.position).normalized;
-            shootDirection.y = 0; 
+            shootDirection.y = 0;
 
             Bullet bulletScript = chargingBullet.GetComponent<Bullet>();
             if (bulletScript != null)
-            {
                 bulletScript.SetTarget(shootDirection);
-            }
 
             Rigidbody rb = chargingBullet.GetComponent<Rigidbody>();
             if (rb != null)
@@ -128,21 +106,13 @@ public class PlayerController : MonoBehaviour
         Vector3 mousePosition = Input.mousePosition;
         mousePosition.z = Camera.main.WorldToScreenPoint(transform.position).z;
         Vector3 worldMousePos = Camera.main.ScreenToWorldPoint(mousePosition);
-
-        Vector3 direction = new Vector3(
-            (worldMousePos - transform.position).x,
-            0,
-            (worldMousePos - transform.position).z
-        ).normalized;
-
+        Vector3 direction = new Vector3((worldMousePos - transform.position).x, 0, (worldMousePos - transform.position).z).normalized;
         firePoint.position = transform.position + direction * firePointOrbitRadius;
     }
 
     void GameOver()
     {
-        UnityEngine.SceneManagement.SceneManager.LoadScene(
-            UnityEngine.SceneManagement.SceneManager.GetActiveScene().name
-        );
+        UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
     }
 
     public void SetPath(List<GameObject> pathTiles)
@@ -156,15 +126,24 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    void CheckForObstacles()
+    void CheckForObstacleAhead()
     {
-        Collider[] hitColliders = Physics.OverlapSphere(transform.position, stopRadius);
+        Vector3 forwardDirection = transform.forward;
+        Vector3 coneOrigin = transform.position;
+        float halfAngle = coneAngle / 2f;
+
+        Collider[] hitColliders = Physics.OverlapSphere(coneOrigin + forwardDirection * (coneLength / 2f), coneLength / 2f);
         foreach (Collider hit in hitColliders)
         {
             if (hit.CompareTag("Obstacle"))
             {
-                canMove = false;
-                return;
+                Vector3 directionToObstacle = hit.transform.position - transform.position;
+                float angle = Vector3.Angle(forwardDirection, directionToObstacle);
+                if (angle < halfAngle)
+                {
+                    canMove = false;
+                    return;
+                }
             }
         }
         canMove = true;
@@ -172,7 +151,7 @@ public class PlayerController : MonoBehaviour
 
     public void StartMoving()
     {
-        canMove = true; 
+        canMove = true;
     }
 
     void MoveAlongPath()
@@ -185,9 +164,7 @@ public class PlayerController : MonoBehaviour
             transform.position = Vector3.MoveTowards(transform.position, nextPoint, moveSpeed * Time.deltaTime);
 
             if (Vector3.Distance(transform.position, nextPoint) < 0.1f)
-            {
                 pathPoints.Dequeue();
-            }
         }
     }
 }
